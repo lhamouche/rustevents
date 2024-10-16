@@ -1,5 +1,6 @@
+use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::mem;
 use std::os::raw::{c_uint, c_ulong, c_ushort};
 use xkbcommon::xkb;
@@ -33,14 +34,42 @@ fn read_input_event(file: &mut File, buffer: &mut [u8]) -> io::Result<InputEvent
     Ok(unsafe { std::ptr::read(buffer.as_ptr() as *const _) })
 }
 
-fn handle_event(input_event: &InputEvent, state: &mut xkb::State) {
+fn handle_event(
+    input_event: &InputEvent,
+    state: &mut xkb::State,
+    compose_state: &mut xkb::compose::State,
+) {
     if input_event.type_ == 0x01 {
         let key_code = xkb::Keycode::new(input_event.code as u32 + 8);
         if let Some(key_direction) = c_uint_to_key_direction(input_event.value) {
             state.update_key(key_code, key_direction);
         }
-        let utf8 = state.key_get_utf8(key_code);
-        println!("{:?} {:?}", input_event, utf8);
+
+        let mut utf8_char: Option<String> = None;
+
+        if input_event.value == 1 {
+            let keysym = state.key_get_one_sym(key_code);
+            compose_state.feed(keysym);
+
+            match compose_state.status() {
+                xkb::compose::Status::Composed => {
+                    utf8_char = compose_state.utf8();
+                    compose_state.reset();
+                }
+                xkb::compose::Status::Nothing => {
+                    let c = state.key_get_utf8(key_code);
+                    utf8_char = Some(if c == "\r" { "\n".to_string() } else { c });
+                }
+                xkb::compose::Status::Cancelled => {
+                    compose_state.reset();
+                }
+                _ => {}
+            }
+        }
+
+        // println!("{:?} {:?}", input_event, utf8_char.as_deref().unwrap_or(""));
+        print!("{}", utf8_char.as_deref().unwrap_or(""));
+        std::io::stdout().flush().unwrap();
     }
 }
 
@@ -60,10 +89,17 @@ fn main() -> io::Result<()> {
     )
     .expect("[!] Failed to create keymap");
     let mut state = xkb::State::new(&keymap);
+    let compose_table = xkb::compose::Table::new_from_locale(
+        &context,
+        OsStr::new("fr.UTF-8"),
+        xkb::KEYMAP_COMPILE_NO_FLAGS,
+    )
+    .unwrap();
+    let mut compose_state = xkb::compose::State::new(&compose_table, xkb::STATE_NO_FLAGS);
 
     loop {
         match read_input_event(&mut file, &mut buffer) {
-            Ok(input_event) => handle_event(&input_event, &mut state),
+            Ok(input_event) => handle_event(&input_event, &mut state, &mut compose_state),
             Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
             Err(e) => {
                 eprintln!("[!] Error while reading: {:?}", e);
