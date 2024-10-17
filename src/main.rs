@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -73,28 +74,54 @@ fn handle_event(
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    file: String,
+
+    #[arg(short, long, default_value = "evdev")]
+    rules: String,
+
+    #[arg(short, long, default_value = "pc105")]
+    model: String,
+
+    #[arg(short, long, default_value = "us")]
+    layout: String,
+
+    #[arg(short, long, default_value = "")]
+    variant: String,
+
+    #[arg(short = 'c', long, default_value = "en_US.UTF-8")]
+    locale: String,
+}
+
 fn main() -> io::Result<()> {
-    let mut file = File::open("/dev/input/event0")?;
+    let args = Args::parse();
+
+    let mut file = File::open(args.file)?;
     let mut buffer = [0u8; mem::size_of::<InputEvent>()];
 
     let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
     let keymap = xkb::Keymap::new_from_names(
         &context,
-        "evdev",
-        "pc105",
-        "fr",
-        "latin9",
+        &args.rules,
+        &args.model,
+        &args.layout,
+        &args.variant,
         None,
         xkb::KEYMAP_COMPILE_NO_FLAGS,
     )
-    .expect("[!] Failed to create keymap");
+    .expect("[!] Failed to create keymap.");
+
     let mut state = xkb::State::new(&keymap);
     let compose_table = xkb::compose::Table::new_from_locale(
         &context,
-        OsStr::new("fr.UTF-8"),
+        OsStr::new(&args.locale),
         xkb::KEYMAP_COMPILE_NO_FLAGS,
     )
-    .unwrap();
+    .expect("[!] Failed to create compose table.");
+
     let mut compose_state = xkb::compose::State::new(&compose_table, xkb::STATE_NO_FLAGS);
 
     loop {
