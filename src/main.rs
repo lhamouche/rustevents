@@ -94,6 +94,9 @@ struct Args {
 
     #[arg(short = 'c', long, default_value = "en_US.UTF-8")]
     locale: String,
+
+    #[arg(short, long)]
+    no_numlock: bool,
 }
 
 fn main() -> io::Result<()> {
@@ -115,6 +118,10 @@ fn main() -> io::Result<()> {
     .expect("[!] Failed to create keymap.");
 
     let mut state = xkb::State::new(&keymap);
+    if !args.no_numlock {
+        state.update_key(xkb::Keycode::new(69 as u32 + 8), xkb::KeyDirection::Down);
+    }
+
     let compose_table = xkb::compose::Table::new_from_locale(
         &context,
         OsStr::new(&args.locale),

@@ -64,6 +64,7 @@ sudo apt-get install libxkbcommon-dev
 | `layout`  | `-l`  | `us`             | The keyboard layout (e.g., `us`, `fr`).                    |
 | `variant` | `-v`  | `""`             | Optional layout variant.                                   |
 | `locale`  | `-c`  | `en_US.UTF-8`    | The locale for compose sequences.                          |
+| `no-numlock` | `-n` | `false`        | Do not assume that Num Lock is active by default.          |
 
 ## Examples
 
